@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>L-system Explorer</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --ink: #1c2330;
+    --muted: #5b6472;
+    --line: #d8dde5;
+    --accent: #2563eb;
+    --accent-ink: #ffffff;
+    --stroke: #1f6f43;
+    --canvas-bg: #ffffff;
+    --mono-bg: #eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b;
+      --panel: #1a1f28;
+      --ink: #e8ebf0;
+      --muted: #9aa4b2;
+      --line: #303845;
+      --accent: #4f8cff;
+      --accent-ink: #0d1117;
+      --stroke: #57d38c;
+      --canvas-bg: #10131a;
+      --mono-bg: #141924;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header { padding: 1.1rem 1.4rem 0.4rem; }
+  header h1 { margin: 0; font-size: 1.35rem; letter-spacing: 0.01em; }
+  header p { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.92rem; }
+  header code { font-size: 0.85em; }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 1rem;
+    padding: 1rem 1.4rem;
+    align-items: start;
+  }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+  }
+  .panel label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0.85rem 0 0.25rem;
+  }
+  .panel label:first-child { margin-top: 0; }
+  select, input[type="number"] {
+    width: 100%;
+    padding: 0.42rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
+  }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .rowval { display: flex; justify-content: space-between; align-items: baseline; }
+  .rowval output { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+  .buttons { display: flex; gap: 0.5rem; margin-top: 1rem; }
+  button {
+    flex: 1;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button:hover { filter: brightness(1.06); }
+  .grammar {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+  }
+  .grammar h2 {
+    margin: 0 0 0.4rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .grammar code {
+    display: block;
+    background: var(--mono-bg);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 0.5rem 0.6rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+  .grammar p.note { color: var(--muted); margin: 0.5rem 0 0; }
+  .stage { position: relative; }
+  canvas {
+    display: block;
+    width: 100%;
+    height: min(72vh, 640px);
+    background: var(--canvas-bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .stats {
+    position: absolute;
+    right: 0.7rem;
+    bottom: 0.55rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    background: color-mix(in srgb, var(--panel) 80%, transparent);
+    padding: 0.1rem 0.45rem;
+    border-radius: 6px;
+  }
+  footer {
+    padding: 0.6rem 1.4rem 1rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>L-system Explorer</h1>
+  <p>Interactive companion to the Python scripts in this repo &mdash; each preset is the
+     L-system grammar behind one <code>.py</code> file.</p>
+</header>
+
+<main>
+  <div class="panel">
+    <label for="preset">Fractal (Python script)</label>
+    <select id="preset"></select>
+
+    <label for="iter" class="rowlabel">
+      <span class="rowval">Iterations <output id="iterVal">0</output></span>
+    </label>
+    <input type="range" id="iter" min="0" max="10" step="1" value="0">
+
+    <label for="angle">Angle (degrees)</label>
+    <input type="number" id="angle" step="1" min="-180" max="180" value="90">
+
+    <label for="width" class="rowlabel">
+      <span class="rowval">Line width <output id="widthVal">1</output></span>
+    </label>
+    <input type="range" id="width" min="0.5" max="4" step="0.5" value="1">
+
+    <div class="buttons">
+      <button id="draw">Draw</button>
+      <button id="animate" class="primary">Animate</button>
+    </div>
+
+    <div class="grammar">
+      <h2>Grammar</h2>
+      <code id="grammar"></code>
+      <p class="note" id="note"></p>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="canvas"></canvas>
+    <div class="stats" id="stats"></div>
+  </div>
+</main>
+
+<footer>
+  Source &amp; Python versions:
+  <a href="https://github.com/soroush83faraz/L-system">github.com/soroush83faraz/L-system</a>
+  &mdash; a group project with <a href="https://github.com/SaeedGeshani">Saeed Geshani</a>.
+</footer>
+
+<script>
+"use strict";
+/* ============================ L-system engine ============================ */
+/* Presets mirror the Python scripts in the repo root. The recursive /
+   chaos-game scripts are expressed here as their exact classic L-system
+   equivalents; each note says how the .py file produces the same figure. */
+
+var SEGMENT_CAP = 220000;
+
+var PRESETS = [
+  {
+    file: "DragonCurve.py", name: "Dragon Curve",
+    axiom: "FX", rules: { X: "X+YF+", Y: "-FX-Y" },
+    angle: 90, iter: 10, minIter: 0, maxIter: 17, heading: 0, decay: 1,
+    note: "DragonCurve.py draws this with a recursive turtle function (45°/90°/45° folds, depth 10); the grammar above is the same curve as an L-system."
+  },
+  {
+    file: "koch_curve.py", name: "Koch Curve (snowflake)",
+    axiom: "F--F--F", rules: { F: "F+F--F+F" },
+    angle: 60, iter: 4, minIter: 0, maxIter: 8, heading: 0, decay: 1,
+    note: "koch_curve.py recursively draws one Koch edge (depth 4) three times, turning 120° between them — exactly the snowflake axiom F--F--F."
+  },
+  {
+    file: "FractalTree.py", name: "Fractal Tree",
+    axiom: "X", rules: { X: "F[-X][+X]" },
+    angle: 20, iter: 5, minIter: 1, maxIter: 16, heading: 90, decay: 0.75,
+    note: "FractalTree.py recursively branches 20° right then left, shortening each branch (75→15 px, 5 levels). Here branch length shrinks 25% per bracket depth to match."
+  },
+  {
+    file: "FractalPlant.py", name: "Fractal Plant",
+    axiom: "X", rules: { X: "F+[[X]-X]-F[-FX]+X", F: "FF" },
+    angle: 25, iter: 6, minIter: 1, maxIter: 8, heading: 90, decay: 1,
+    note: "FractalPlant.py actually plots the Barnsley fern as a chaos-game IFS (100,000 points), not a rewriting system; this preset is the classic L-system “fractal plant”, its grammar-based counterpart."
+  },
+  {
+    file: "SierpinskiTriagle.py", name: "Sierpinski Triangle",
+    axiom: "F-G-G", rules: { F: "F-G+F+G-F", G: "GG" },
+    angle: 120, iter: 5, minIter: 0, maxIter: 10, heading: 0, decay: 1,
+    note: "SierpinskiTriagle.py subdivides a triangle by midpoints (degree 5); this is the equivalent edge-rewriting L-system (F and G both draw)."
+  },
+  {
+    file: "Sprinski2.py", name: "Sierpinski 2 (arrowhead)",
+    axiom: "A", rules: { A: "B-A-B", B: "A+B+A" },
+    angle: 60, iter: 6, minIter: 0, maxIter: 11, heading: 0, decay: 1,
+    note: "Sprinski2.py reaches the same triangle with a 10,000-point chaos game; this preset is the Sierpinski arrowhead curve, the single-line L-system route to it."
+  }
+];
+
+function expand(axiom, rules, n) {
+  var s = axiom;
+  for (var i = 0; i < n; i++) {
+    var parts = new Array(s.length);
+    for (var j = 0; j < s.length; j++) {
+      var c = s[j];
+      parts[j] = rules[c] !== undefined ? rules[c] : c;
+    }
+    s = parts.join("");
+    if (s.length > 4e6) throw new Error("Expansion too large");
+  }
+  return s;
+}
+
+/* Turtle interpretation: F G A B draw, + turns left, - turns right,
+   [ ] push/pop (length is multiplied by `decay` inside brackets).
+   Returns flat segment list [x1,y1,x2,y2,...] plus bounds. */
+function interpret(s, angleDeg, headingDeg, decay) {
+  var rad = Math.PI / 180;
+  var a = angleDeg * rad;
+  var x = 0, y = 0, h = headingDeg * rad, len = 1;
+  var minX = 0, minY = 0, maxX = 0, maxY = 0;
+  var stack = [];
+  var segs = [];
+  for (var i = 0; i < s.length; i++) {
+    var c = s[i];
+    if (c === "F" || c === "G" || c === "A" || c === "B") {
+      var nx = x + Math.cos(h) * len;
+      var ny = y + Math.sin(h) * len;
+      segs.push(x, y, nx, ny);
+      x = nx; y = ny;
+      if (x < minX) minX = x; else if (x > maxX) maxX = x;
+      if (y < minY) minY = y; else if (y > maxY) maxY = y;
+      if (segs.length > SEGMENT_CAP * 4) throw new Error("Segment cap exceeded");
+    } else if (c === "+") {
+      h += a;
+    } else if (c === "-") {
+      h -= a;
+    } else if (c === "[") {
+      stack.push(x, y, h, len);
+      len *= decay;
+    } else if (c === "]") {
+      len = stack.pop(); h = stack.pop(); y = stack.pop(); x = stack.pop();
+    }
+  }
+  return { segs: segs, minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+}
+
+function buildModel(preset, iterations, angleDeg) {
+  var s = expand(preset.axiom, preset.rules, iterations);
+  return interpret(s, angleDeg, preset.heading, preset.decay);
+}
+
+/* Node test hook (unused in the browser) */
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { PRESETS: PRESETS, expand: expand, interpret: interpret, buildModel: buildModel };
+}
+
+/* ================================ UI ==================================== */
+if (typeof document !== "undefined") {
+(function () {
+  var canvas = document.getElementById("canvas");
+  var ctx = canvas.getContext("2d");
+  var els = {
+    preset: document.getElementById("preset"),
+    iter: document.getElementById("iter"),
+    iterVal: document.getElementById("iterVal"),
+    angle: document.getElementById("angle"),
+    width: document.getElementById("width"),
+    widthVal: document.getElementById("widthVal"),
+    draw: document.getElementById("draw"),
+    animate: document.getElementById("animate"),
+    grammar: document.getElementById("grammar"),
+    note: document.getElementById("note"),
+    stats: document.getElementById("stats")
+  };
+
+  PRESETS.forEach(function (p, i) {
+    var o = document.createElement("option");
+    o.value = i;
+    o.textContent = p.name + " — " + p.file;
+    els.preset.appendChild(o);
+  });
+
+  var animId = 0;
+
+  function currentPreset() { return PRESETS[+els.preset.value]; }
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function fitCanvas() {
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.clientWidth, hgt = canvas.clientHeight;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(hgt * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(hgt * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: w, h: hgt };
+  }
+
+  function transformFor(model, w, h) {
+    var pad = 18;
+    var bw = model.maxX - model.minX || 1;
+    var bh = model.maxY - model.minY || 1;
+    var scale = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh);
+    return {
+      scale: scale,
+      ox: (w - scale * bw) / 2 - model.minX * scale,
+      /* canvas y grows downward; turtle y grows upward, so flip */
+      oy: (h - scale * bh) / 2 + model.maxY * scale
+    };
+  }
+
+  function px(t, x) { return t.ox + x * t.scale; }
+  function py(t, y) { return t.oy - y * t.scale; }
+
+  function render(animate) {
+    cancelAnimationFrame(animId);
+    var p = currentPreset();
+    var iterations = +els.iter.value;
+    var angle = +els.angle.value;
+    var size = fitCanvas();
+    ctx.clearRect(0, 0, size.w, size.h);
+
+    var model;
+    try {
+      model = buildModel(p, iterations, angle);
+    } catch (e) {
+      els.stats.textContent = "Too large to draw — lower the iterations";
+      return;
+    }
+    var n = model.segs.length / 4;
+    els.stats.textContent = n.toLocaleString() + " segment" + (n === 1 ? "" : "s");
+    if (n === 0) return;
+
+    var t = transformFor(model, size.w, size.h);
+    ctx.strokeStyle = cssVar("--stroke");
+    ctx.lineWidth = +els.width.value;
+    ctx.lineCap = "round";
+
+    var segs = model.segs;
+    function drawRange(from, to) {
+      ctx.beginPath();
+      for (var i = from; i < to; i++) {
+        var k = i * 4;
+        ctx.moveTo(px(t, segs[k]), py(t, segs[k + 1]));
+        ctx.lineTo(px(t, segs[k + 2]), py(t, segs[k + 3]));
+      }
+      ctx.stroke();
+    }
+
+    if (!animate) {
+      drawRange(0, n);
+      return;
+    }
+    var chunk = Math.max(1, Math.ceil(n / 240));
+    var done = 0;
+    (function step() {
+      var to = Math.min(n, done + chunk);
+      drawRange(done, to);
+      done = to;
+      els.stats.textContent = done.toLocaleString() + " / " + n.toLocaleString() + " segments";
+      if (done < n) animId = requestAnimationFrame(step);
+      else els.stats.textContent = n.toLocaleString() + " segments";
+    })();
+  }
+
+  function showGrammar() {
+    var p = currentPreset();
+    var lines = ["axiom : " + p.axiom];
+    Object.keys(p.rules).forEach(function (k) {
+      lines.push(k + " → " + p.rules[k]);
+    });
+    lines.push("angle : " + p.angle + "°");
+    if (p.decay !== 1) lines.push("length: ×" + p.decay + " per [");
+    els.grammar.textContent = lines.join("\n");
+    els.note.textContent = p.note;
+  }
+
+  function applyPreset() {
+    var p = currentPreset();
+    els.iter.min = p.minIter;
+    els.iter.max = p.maxIter;
+    els.iter.value = p.iter;
+    els.iterVal.textContent = p.iter;
+    els.angle.value = p.angle;
+    showGrammar();
+    render(false);
+  }
+
+  els.preset.addEventListener("change", applyPreset);
+  els.iter.addEventListener("input", function () {
+    els.iterVal.textContent = els.iter.value;
+    render(false);
+  });
+  els.angle.addEventListener("input", function () { render(false); });
+  els.width.addEventListener("input", function () {
+    els.widthVal.textContent = els.width.value;
+    render(false);
+  });
+  els.draw.addEventListener("click", function () { render(false); });
+  els.animate.addEventListener("click", function () { render(true); });
+
+  window.addEventListener("resize", function () { render(false); });
+  if (window.matchMedia) {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { render(false); });
+  }
+
+  applyPreset();
+})();
+}
+</script>
+</body>
+</html>
